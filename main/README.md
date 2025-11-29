@@ -1,0 +1,1 @@
+This project is a fully implemented Data Encryption Standard (DES) encryption and decryption tool written in pure C. Designed primarily for learning purposes, it demonstrates how classic symmetric-key block ciphers work at a low level through bit manipulation, permutation tables
