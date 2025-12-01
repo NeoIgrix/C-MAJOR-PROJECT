@@ -158,7 +158,7 @@ int select_file_from_folder(char *selected_path_buffer) {
 
 void print_header() {
     printf("\n======================================\n");
-    printf("      CRIMSON DES ENCRYPTION V4.0     \n");
+    printf("     DES ENCRYPTION V4.0     \n");
     printf("======================================\n");
 }
 
