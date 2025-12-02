@@ -2,216 +2,130 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
-#include <ctype.h>
-#include <windows.h> // Required for folder handling
+#include <windows.h> 
 
-// Use relative paths because we are in /src, headers are in /include
 #include "../include/des_tables.h"
 #include "../include/des.h"
 
-#define DATA_FOLDER "my_files"
+#define DIR "my_files"
 
-// --- PROTOTYPES ---
-void print_header();
-void get_valid_key(char *key_buffer);
-void encrypt_file_interface();
-void decrypt_file_interface();
-int select_file_from_folder(char *selected_path_buffer);
-int confirm_safety_protocol(); // New Safety Check Function
+/*
+   VAR DICTIONARY:
+   ch    : user choice
+   path  : full file path
+   k     : secret key
+   cnt   : file count
+   h     : file handle
+*/
 
-// Helper functions (defined in file_handler.c)
-extern void encrypt_file(char *input_path, char *key);
-extern void decrypt_file(char *input_path, char *key);
+// extern functions from file_handler.c
+extern void enc_file(char *path, char *key);
+extern void dec_file(char *path, char *key);
+
+// helper to select file
+int pick_file(char *path_buf) {
+    WIN32_FIND_DATA f_data;
+    HANDLE h;
+    char search[200], list[50][100]; 
+    int cnt = 0, ch;
+    
+    // create folder if not exists
+    CreateDirectory(DIR, NULL);
+
+    // loop until user puts a file in folder
+    while(1) {
+        cnt = 0;
+        sprintf(search, "%s\\*", DIR);
+        
+        h = FindFirstFile(search, &f_data);
+        
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                // skip . and ..
+                if (strcmp(f_data.cFileName, ".") != 0 && strcmp(f_data.cFileName, "..") != 0) {
+                    strcpy(list[cnt], f_data.cFileName);
+                    cnt++;
+                }
+            } while (FindNextFile(h, &f_data) != 0 && cnt < 50);
+            FindClose(h);
+        }
+
+        if (cnt == 0) {
+            printf("\nFolder '%s' is empty!\n", DIR);
+            printf("Please paste files there and press Enter (or 0 to exit)...\n");
+            char c = getchar();
+            if (c == '0') return 0;
+            while(getchar() != '\n'); // clear buffer
+        } else {
+            break; // files found
+        }
+    }
+
+    printf("\n--- FILES ---\n");
+    for (int i = 0; i < cnt; i++) 
+        printf("[%d] %s\n", i + 1, list[i]);
+
+    printf("Select file (0 to cancel): ");
+    scanf("%d", &ch);
+    while(getchar() != '\n');
+
+    if (ch > 0 && ch <= cnt) {
+        sprintf(path_buf, "%s\\%s", DIR, list[ch - 1]);
+        return 1;
+    }
+    return 0;
+}
+
+void ui_enc() {
+    char path[256], k[100];
+    
+    // pick file
+    if (!pick_file(path)) return;
+
+    // get key
+    printf("Enter 8-char Key: ");
+    fgets(k, sizeof(k), stdin);
+    k[strcspn(k, "\n")] = 0;
+
+    if (strlen(k) != 8) {
+        printf("Key must be 8 chars.\n");
+        return;
+    }
+
+    enc_file(path, k);
+    printf("Press Enter...");
+    getchar();
+}
+
+void ui_dec() {
+    char path[256], k[100];
+    
+    printf("\n(Make sure .enc file is in the folder)\n");
+    if (!pick_file(path)) return;
+
+    printf("Enter 8-char Key: ");
+    fgets(k, sizeof(k), stdin);
+    k[strcspn(k, "\n")] = 0;
+
+    dec_file(path, k);
+    printf("Press Enter...");
+    getchar();
+}
 
 int main() {
-    int choice;
-    srand(time(0)); 
-
+    int ch;
+    
     while(1) {
-        print_header();
-        printf("\nSelect an option:\n");
-        printf("[1] Encrypt a File\n");
-        printf("[2] Decrypt a File\n");
-        printf("[3] Exit\n");
-        printf(">> ");
+        printf("\n=== DES PROJECT ===\n");
+        printf("1. Encrypt\n2. Decrypt\n3. Exit\n>> ");
         
-        scanf("%d", &choice);
+        scanf("%d", &ch);
         while(getchar() != '\n'); 
 
-        switch(choice) {
-            case 1:
-                encrypt_file_interface();
-                break;
-            case 2:
-                decrypt_file_interface();
-                break;
-            case 3:
-                printf("\nExiting Secure System. Stay Safe!\n");
-                return 0;
-            default:
-                printf("\n[!] Invalid Option.\n");
-        }
+        if (ch == 1) ui_enc();
+        else if (ch == 2) ui_dec();
+        else if (ch == 3) break;
+        else printf("Invalid.\n");
     }
     return 0;
-}
-
-// --- NEW SAFETY LOGIC ---
-int confirm_safety_protocol() {
-    char response;
-    
-    printf("\n[SAFETY CHECK] Secure Delete Protocol is ACTIVE.\n");
-    printf("The original file will be PERMANENTLY deleted after encryption.\n");
-    
-    // Level 1: Backup Check
-    printf(">> Have you backed up this file elsewhere? (y/n): ");
-    scanf("%c", &response);
-    while(getchar() != '\n'); // Clear buffer
-    
-    if (tolower(response) == 'y') {
-        return 1; // User is safe, proceed
-    }
-    
-    // Level 2: Final Warning (Only if they said No to backup)
-    printf("\n[!!! WARNING !!!]\n");
-    printf("You indicated you do NOT have a backup.\n");
-    printf("If you proceed, the original file is gone forever.\n");
-    printf(">> Do you still want to continue? (y/n): ");
-    
-    scanf("%c", &response);
-    while(getchar() != '\n');
-    
-    if (tolower(response) == 'y') {
-        printf("[*] User acknowledged risk. Proceeding...\n");
-        return 1;
-    }
-    
-    printf("[-] Operation Cancelled by user.\n");
-    return 0;
-}
-
-// --- INTELLIGENT FILE SELECTOR ---
-int select_file_from_folder(char *selected_path_buffer) {
-    WIN32_FIND_DATA findData;
-    HANDLE hFind;
-    char search_path[200];
-    char file_list[50][100]; 
-    int file_count = 0;
-    int choice;
-    
-    // 1. Check/Create Folder
-    if (CreateDirectory(DATA_FOLDER, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) {
-        // Folder is good
-    } else {
-        printf("[!] Error: Could not create '%s' folder.\n", DATA_FOLDER);
-        return 0;
-    }
-
-    sprintf(search_path, "%s\\*", DATA_FOLDER);
-
-    // 2. The "Refresh" Loop
-    while (1) {
-        file_count = 0;
-        hFind = FindFirstFile(search_path, &findData);
-        
-        // Count valid files
-        if (hFind != INVALID_HANDLE_VALUE) {
-            do {
-                if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
-                    strcpy(file_list[file_count], findData.cFileName);
-                    file_count++;
-                }
-            } while (FindNextFile(hFind, &findData) != 0 && file_count < 50);
-            FindClose(hFind);
-        }
-
-        if (file_count == 0) {
-            printf("\n[Action Required] The '%s' folder is empty.\n", DATA_FOLDER);
-            printf("Please paste your files into the '%s' folder now.\n", DATA_FOLDER);
-            printf(">> Press [ENTER] once you have pasted the files (or '0' to cancel): ");
-            
-            char check = getchar();
-            if (check == '0') return 0; // Allow exit
-            // Loop restarts and checks again
-        } else {
-            break; // Files found!
-        }
-    }
-
-    // 3. Display Files
-    printf("\n--- FILES FOUND IN '%s' ---\n", DATA_FOLDER);
-    for (int i = 0; i < file_count; i++) {
-        printf("[%d] %s\n", i + 1, file_list[i]);
-    }
-
-    printf("\nSelect file number (0 to cancel): ");
-    scanf("%d", &choice);
-    while(getchar() != '\n');
-
-    if (choice > 0 && choice <= file_count) {
-        sprintf(selected_path_buffer, "%s\\%s", DATA_FOLDER, file_list[choice - 1]);
-        return 1;
-    }
-    
-    printf("[*] Selection Cancelled.\n");
-    return 0;
-}
-
-void print_header() {
-    printf("\n======================================\n");
-    printf("      CRIMSON DES ENCRYPTION V4.0     \n");
-    printf("======================================\n");
-}
-
-void get_valid_key(char *key_buffer) {
-    char input[100];
-    int valid = 0;
-    while (!valid) {
-        printf("\nEnter a Secret Key (8 characters): ");
-        fgets(input, sizeof(input), stdin);
-        input[strcspn(input, "\n")] = 0;
-        
-        if (strlen(input) == 8) {
-            strcpy(key_buffer, input);
-            valid = 1;
-        } else {
-            printf("[!] Key must be exactly 8 characters.\n");
-        }
-    }
-}
-
-void encrypt_file_interface() {
-    char full_path[256];
-    char key[9]; 
-    
-    // 1. Select File (and prompt user to paste if empty)
-    if (!select_file_from_folder(full_path)) return;
-
-    // 2. Safety Check (The Backup Warning)
-    if (!confirm_safety_protocol()) return;
-
-    // 3. Get Key and Execute
-    get_valid_key(key);
-    printf("\n[Process] Encrypting: %s\n", full_path);
-    encrypt_file(full_path, key);
-    
-    printf("\nDone! Press Enter to return to menu...");
-    getchar();
-}
-
-void decrypt_file_interface() {
-    char full_path[256];
-    char key[9];
-    
-    printf("\n[Tip] Please paste your .enc file into the folder if not present.\n");
-    
-    if (!select_file_from_folder(full_path)) return;
-
-    // No safety check needed for Decryption (we aren't deleting the source dangerously)
-    get_valid_key(key);
-    
-    printf("\n[Process] Decrypting: %s\n", full_path);
-    decrypt_file(full_path, key);
-    
-    printf("\nDone! Press Enter to return to menu...");
-    getchar();
 }
