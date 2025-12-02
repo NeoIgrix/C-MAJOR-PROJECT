@@ -76,25 +76,27 @@ int pick_file(char *path_buf) {
     return 0;
 }
 
-void ui_enc() {
-    char path[256], k[100];
-    
-    // pick file
-    if (!pick_file(path)) return;
+void print_header() {
+    printf("\n======================================\n");
+    printf("      CRIMSON DES ENCRYPTION V4.0     \n");
+    printf("======================================\n");
+}
 
-    // get key
-    printf("Enter 8-char Key: ");
-    fgets(k, sizeof(k), stdin);
-    k[strcspn(k, "\n")] = 0;
-
-    if (strlen(k) != 8) {
-        printf("Key must be 8 chars.\n");
-        return;
+void get_valid_key(char *key_buffer) {
+    char input[100];
+    int valid = 0;
+    while (!valid) {
+        printf("\nEnter a Secret Key (8 characters): ");
+        fgets(input, sizeof(input), stdin);
+        input[strcspn(input, "\n")] = 0;
+        
+        if (strlen(input) == 8) {
+            strcpy(key_buffer, input);
+            valid = 1;
+        } else {
+            printf("[!] Key must be exactly 8 characters.\n");
+        }
     }
-
-    enc_file(path, k);
-    printf("Press Enter...");
-    getchar();
 }
 
 void ui_dec() {
